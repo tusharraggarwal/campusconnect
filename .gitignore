@@ -1,0 +1,7 @@
+/venv/
+.env
+backend/.env
+__pycache__/
+node_modules/
+*.pyc
+campusconnect.db
