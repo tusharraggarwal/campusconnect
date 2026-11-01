@@ -1,6 +1,6 @@
 # CampusConnect AI
 
-A full-stack student networking MVP built with FastAPI, React + Vite, SQLite, scikit-learn and optional Groq/Llama.
+A full-stack student networking MVP built with FastAPI, React + Vite, PostgreSQL (or SQLite fallback), scikit-learn and optional Groq/Llama.
 
 ## Features
 - Create and browse student profiles
@@ -36,7 +36,17 @@ uvicorn app.main:app --reload
 Backend: http://127.0.0.1:8000  
 Swagger API docs: http://127.0.0.1:8000/docs
 
-The database and demo profiles are created automatically on first run.
+### Database configuration
+
+The backend reads `DATABASE_URL` from `backend/.env`. To use PostgreSQL:
+
+1. Create a PostgreSQL database named `campusconnect`.
+2. Copy `backend/.env.example` to `backend/.env`.
+3. Set `DATABASE_URL` to `postgresql+psycopg://postgres:YOUR_PASSWORD@localhost:5432/campusconnect` (replace the username/password with your own).
+4. Install dependencies with `pip install -r requirements.txt` so the Psycopg 3 driver is installed.
+5. Start FastAPI as shown above. Tables and demo profiles are created automatically on first run.
+
+If `DATABASE_URL` is not set, the app falls back to a local SQLite database. Never commit `backend/.env`; it is excluded by `.gitignore`.
 
 ## 2. Run the frontend
 
