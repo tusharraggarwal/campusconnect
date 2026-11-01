@@ -46,6 +46,13 @@ function App() {
   const [sending,setSending] = useState(false);
   const [form,setForm] = useState({name:"",course:"",year:"1st Year",bio:"",skills:"",interests:"",goals:"",looking_for:""});
   const [notice,setNotice] = useState("");
+  const [authToken,setAuthToken] = useState(()=>localStorage.getItem("campusconnect_token") || "");
+  const [currentUser,setCurrentUser] = useState(null);
+  const [authMode,setAuthMode] = useState("login");
+  const [authStep,setAuthStep] = useState("credentials");
+  const [authForm,setAuthForm] = useState({full_name:"",email:"",password:""});
+  const [verificationCode,setVerificationCode] = useState("");
+  const [authBusy,setAuthBusy] = useState(false);
 
   async function loadData() {
     try {
@@ -64,6 +71,45 @@ function App() {
     } finally { setLoading(false); }
   }
   useEffect(()=>{loadData();},[]);
+  useEffect(()=>{
+    if(!authToken) return;
+    fetch(`${API}/auth/me`,{headers:{Authorization:`Bearer ${authToken}`}})
+      .then(async r=>{if(!r.ok) throw new Error("Session expired"); return r.json();})
+      .then(setCurrentUser)
+      .catch(()=>{localStorage.removeItem("campusconnect_token");setAuthToken("");setCurrentUser(null);});
+  },[authToken]);
+
+  function openAuth(mode="login") {
+    setAuthMode(mode); setAuthStep("credentials"); setModal("auth");
+  }
+  function logout() {
+    localStorage.removeItem("campusconnect_token"); setAuthToken(""); setCurrentUser(null);
+    setNotice("You have been logged out.");
+  }
+  async function submitAuth(e) {
+    e.preventDefault(); setAuthBusy(true);
+    try {
+      let endpoint, body;
+      if(authStep==="verify") {
+        endpoint="/auth/verify"; body={email:authForm.email,code:verificationCode};
+      } else if(authMode==="register") {
+        endpoint="/auth/register"; body=authForm;
+      } else {
+        endpoint="/auth/login"; body={email:authForm.email,password:authForm.password};
+      }
+      const response=await fetch(`${API}${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      const data=await response.json();
+      if(!response.ok) throw new Error(data.detail || "Authentication failed.");
+      if(authStep==="verify" || authMode==="login") {
+        localStorage.setItem("campusconnect_token",data.access_token);
+        setAuthToken(data.access_token); setCurrentUser(data.user);
+        setModal(null); setNotice("Welcome to CampusConnect, "+data.user.full_name+"!");
+      } else {
+        setAuthStep("verify"); setNotice("Verification code sent to your IILM email.");
+      }
+    } catch(err) { setNotice(err.message || "Authentication failed."); }
+    finally {setAuthBusy(false);}
+  }
 
   const filtered = useMemo(()=>{
     const q=search.toLowerCase().trim();
@@ -76,19 +122,21 @@ function App() {
     e.preventDefault();
     const payload={...form,skills:form.skills.split(",").map(x=>x.trim()).filter(Boolean),interests:form.interests.split(",").map(x=>x.trim()).filter(Boolean),goals:form.goals.split(",").map(x=>x.trim()).filter(Boolean)};
     try {
-      const response=await fetch(`${API}/students`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
-      if(!response.ok) throw new Error("Could not save profile");
+      if(!authToken) { setModal("auth"); setAuthMode("login"); setNotice("Please log in before creating your student profile."); return; }
+      const response=await fetch(`${API}/students`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${authToken}`},body:JSON.stringify(payload)});
+      if(!response.ok) { const errorData=await response.json().catch(()=>({})); throw new Error(errorData.detail || "Could not save profile."); }
       const saved=await response.json();
       setStudents(prev=>[saved,...prev]); setNotice("Your profile has been created!"); setModal(null);
       setForm({name:"",course:"",year:"1st Year",bio:"",skills:"",interests:"",goals:"",looking_for:""});
-    } catch { setNotice("Start the FastAPI backend to save a profile."); }
+    } catch(err) { setNotice(err.message || "Could not save your profile."); }
   }
   async function sendChat(e) {
     e.preventDefault(); if(!chatInput.trim()) return;
     const message=chatInput.trim(); setChatInput("");
     setChatMessages(prev=>[...prev,{role:"user",text:message}]); setSending(true);
     try {
-      const res=await fetch(`${API}/assistant`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message,student_id:1})});
+      if(!authToken) { setChatMessages(prev=>[...prev,{role:"assistant",text:"Please log in with your IILM email to use Campus AI."}]); return; }
+      const res=await fetch(`${API}/assistant`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${authToken}`},body:JSON.stringify({message})});
       const data=await res.json();
       setChatMessages(prev=>[...prev,{role:"assistant",text:data.reply || data.detail || "I couldn't generate a response."}]);
     } catch { setChatMessages(prev=>[...prev,{role:"assistant",text:"I can't reach the backend right now. Start FastAPI and try again."}]); }
@@ -107,7 +155,7 @@ function App() {
       </nav>
       <div className="sidebar-bottom">
         <div className="campus-card"><div className="campus-icon"><GraduationCap size={19}/></div><b>Your campus, closer.</b><p>Find people who make your next idea possible.</p></div>
-        <div className="mini-profile"><div className="mini-avatar">S</div><div><b>Student account</b><span>Explore mode</span></div><ChevronDown size={15}/></div>
+        <div className="mini-profile"><div className="mini-avatar">{currentUser?.full_name?.[0]||"S"}</div><div><b>{currentUser?.full_name||"Student account"}</b><span>{currentUser?"Verified account":"Explore mode"}</span></div><ChevronDown size={15}/></div>
       </div>
     </aside>
 
@@ -115,7 +163,7 @@ function App() {
       <header className="topbar">
         <div className="mobile-brand"><span className="brand-mark"><Users size={18}/></span>campusconnect<sup>AI</sup></div>
         <div className="breadcrumb">Community <span>/</span> <b>{active}</b></div>
-        <div className="top-actions"><span className={`api-status ${apiOnline?"online":""}`}><i/>{apiOnline?"API connected":"Demo preview"}</span><button className="icon-button notification"><Bell size={18}/></button><button className="primary-button compact" onClick={()=>setModal("create")}><Plus size={16}/> Create profile</button></div>
+        <div className="top-actions"><span className={`api-status ${apiOnline?"online":""}`}><i/>{apiOnline?"API connected":"Demo preview"}</span><button className="icon-button notification"><Bell size={18}/></button>{currentUser?<button className="outline-button" onClick={logout}>Log out</button>:<button className="outline-button" onClick={()=>openAuth("login")}>Log in</button>}<button className="primary-button compact" onClick={()=>setModal("create")}><Plus size={16}/> Create profile</button></div>
       </header>
 
       <section className="hero">
@@ -158,7 +206,17 @@ function App() {
 
     {modal && <div className="modal-backdrop" onClick={()=>setModal(null)}><div className="modal" onClick={e=>e.stopPropagation()}>
       <button className="modal-close" onClick={()=>setModal(null)}><X size={19}/></button>
-      {modal==="create" ? <><div className="modal-kicker"><Sparkles size={15}/> JOIN THE COMMUNITY</div><h2>Create your student profile</h2><p className="muted">Help others discover what you bring to the table.</p>
+      {modal==="auth" ? <><div className="modal-kicker"><Sparkles size={15}/> IILM STUDENT ACCESS</div><h2>{authStep==="verify"?"Verify your email":authMode==="register"?"Create your account":"Welcome back"}</h2><p className="muted">{authStep==="verify"?"Enter the six-digit code sent to your university email.": "Use your @iilm.edu email address to access CampusConnect."}</p>
+        <form className="profile-form" onSubmit={submitAuth}>
+          {authStep==="credentials" && authMode==="register" && <label>Full name<input required minLength="2" value={authForm.full_name} onChange={e=>setAuthForm({...authForm,full_name:e.target.value})} placeholder="Your full name"/></label>}
+          <label>University email<input required type="email" value={authForm.email} onChange={e=>setAuthForm({...authForm,email:e.target.value})} placeholder="you@iilm.edu" disabled={authStep==="verify"}/></label>
+          {authStep==="credentials" && <label>Password<input required type="password" minLength={authMode==="register"?10:1} value={authForm.password} onChange={e=>setAuthForm({...authForm,password:e.target.value})} placeholder={authMode==="register"?"At least 10 characters":"Your password"}/></label>}
+          {authStep==="verify" && <label>Verification code<input required inputMode="numeric" pattern="[0-9]{6}" maxLength="6" value={verificationCode} onChange={e=>setVerificationCode(e.target.value.replace(/\D/g,"").slice(0,6))} placeholder="6-digit code"/></label>}
+          <button className="primary-button full-width" type="submit" disabled={authBusy}>{authBusy?"Please wait...":authStep==="verify"?"Verify and continue":authMode==="register"?"Create account":"Log in"} <ArrowRight size={16}/></button>
+        </form>
+        {authStep==="credentials" && <p className="auth-switch">{authMode==="register"?"Already registered?":"New to CampusConnect?"} <button type="button" onClick={()=>setAuthMode(authMode==="register"?"login":"register")}>{authMode==="register"?"Log in":"Create an account"}</button></p>}
+        {authStep==="verify" && <p className="auth-switch">Didn't receive a code? <button type="button" onClick={async()=>{try{const r=await fetch(`${API}/auth/resend-verification?email=${encodeURIComponent(authForm.email)}`,{method:"POST"});const d=await r.json();if(!r.ok)throw new Error(d.detail||"Could not resend code");setNotice(d.message);}catch(err){setNotice(err.message);}}}>Resend code</button> · <button type="button" onClick={()=>setAuthStep("credentials")}>Go back</button></p>}
+      </> : modal==="create" ? <><div className="modal-kicker"><Sparkles size={15}/> JOIN THE COMMUNITY</div><h2>Create your student profile</h2><p className="muted">Help others discover what you bring to the table.</p>
         <form className="profile-form" onSubmit={createProfile}>
           <label>Full name<input required minLength="2" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="e.g. Tushar Aggarwal"/></label>
           <div className="form-two"><label>Course<input value={form.course} onChange={e=>setForm({...form,course:e.target.value})} placeholder="B.Tech CSE"/></label><label>Year<select value={form.year} onChange={e=>setForm({...form,year:e.target.value})}><option>1st Year</option><option>2nd Year</option><option>3rd Year</option><option>4th Year</option></select></label></div>

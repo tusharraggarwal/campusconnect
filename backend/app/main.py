@@ -7,15 +7,19 @@ from sqlalchemy.orm import Session
 from groq import Groq
 
 from .database import Base, engine, get_db
-from .models import Student
+from .models import Student, User
 from .schemas import StudentCreate, StudentOut, AssistantRequest
 from .recommender import recommend_students
 from .seed import seed_students
+from .auth import get_current_user
+from .auth_routes import router as auth_router
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 Base.metadata.create_all(bind=engine)
 app = FastAPI(title="CampusConnect AI API", version="1.0.0")
+
+app.include_router(auth_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,6 +32,15 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup():
+    # Add the nullable profile-owner column to existing databases without
+    # disturbing existing student rows.
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    if "students" in inspector.get_table_names():
+        columns = {column["name"] for column in inspector.get_columns("students")}
+        if "owner_id" not in columns:
+            with engine.begin() as connection:
+                connection.execute(text("ALTER TABLE students ADD COLUMN owner_id INTEGER"))
     from .database import SessionLocal
     db = SessionLocal()
     try:
@@ -57,8 +70,15 @@ def list_students(search: str = Query(default=""), db: Session = Depends(get_db)
 
 
 @app.post("/api/students", response_model=StudentOut, status_code=201)
-def create_student(payload: StudentCreate, db: Session = Depends(get_db)):
-    student = Student(**payload.model_dump())
+def create_student(
+    payload: StudentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    existing = db.query(Student).filter(Student.owner_id == current_user.id).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="You already have a student profile. Profile editing will be added next.")
+    student = Student(**payload.model_dump(), owner_id=current_user.id)
     db.add(student)
     db.commit()
     db.refresh(student)
@@ -92,7 +112,11 @@ def teammates(student_id: int, limit: int = 6, db: Session = Depends(get_db)):
 
 
 @app.post("/api/assistant")
-def assistant(payload: AssistantRequest, db: Session = Depends(get_db)):
+def assistant(
+    payload: AssistantRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         return {
@@ -100,6 +124,9 @@ def assistant(payload: AssistantRequest, db: Session = Depends(get_db)):
         }
 
     profile_context = ""
+    owned_profile = db.query(Student).filter(Student.owner_id == current_user.id).first()
+    if owned_profile:
+        payload.student_id = owned_profile.id
     if payload.student_id:
         student = db.get(Student, payload.student_id)
         if student:

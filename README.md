@@ -1,58 +1,70 @@
 # CampusConnect AI
 
-A full-stack student networking MVP built with FastAPI, React + Vite, PostgreSQL (or SQLite fallback), scikit-learn and optional Groq/Llama.
+A student networking MVP built with React + Vite, FastAPI, SQLAlchemy, PostgreSQL, scikit-learn and optional Groq/Llama.
 
-## Features
-- Create and browse student profiles
-- Search by name, skills, interests and bio
-- ML recommendations using TF-IDF + cosine similarity
-- Teammate suggestions based on complementary skills
-- Optional GenAI assistant using Groq-hosted Llama
-- Responsive React interface
-
-> MVP note: this starter has no production authentication, messaging system, or privacy controls yet. Use fictional/demo data while developing. Add authentication and authorization before collecting real student information.
+## Current features
+- Student discovery and profile creation
+- PostgreSQL support through `DATABASE_URL`
+- TF-IDF + cosine-similarity recommendations and teammate suggestions
+- Groq-powered campus assistant
+- IILM-only account registration (`@iilm.edu`)
+- Email verification, Argon2 password hashing and JWT login
+- Protected profile creation and AI assistant endpoints
 
 ## Requirements
 - Python 3.10+
 - Node.js 18+
-- npm
+- PostgreSQL 14+ (recommended for this setup)
 
-## 1. Run the backend
+## 1. Configure the backend
+
+Open `backend/.env`, copy it to `backend/.env`, then fill in your own values. Do not commit `.env`.
+
+Required settings:
+
+```env
+DATABASE_URL=postgresql+psycopg://postgres:YOUR_POSTGRES_PASSWORD@localhost:5432/campusconnect
+GROQ_API_KEY=your_groq_key
+GROQ_MODEL=llama-3.3-70b-versatile
+JWT_SECRET_KEY=replace_with_a_random_secret_at_least_32_characters_long
+UNIVERSITY_EMAIL_DOMAIN=iilm.edu
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your_sending_email@gmail.com
+SMTP_PASSWORD=your_email_app_password
+SMTP_FROM=your_sending_email@gmail.com
+```
+
+For Gmail SMTP, use an app password where supported, not your normal account password. SMTP credentials are only for sending verification messages. Do not put secrets in frontend files or GitHub.
+
+Generate a JWT secret with Python:
 
 ```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+If your PostgreSQL password contains URL-reserved characters such as `@`, `/`, `:` or `%`, URL-encode those characters in `DATABASE_URL`.
+
+## 2. Install and run the backend (Windows PowerShell)
+
+```powershell
 cd backend
 python -m venv .venv
-
-# Windows PowerShell:
-.venv\Scripts\Activate.ps1
-
-# macOS/Linux:
-source .venv/bin/activate
-
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Backend: http://127.0.0.1:8000  
-Swagger API docs: http://127.0.0.1:8000/docs
+API: http://127.0.0.1:8000  
+Swagger docs: http://127.0.0.1:8000/docs
 
-### Database configuration
+The application creates the `users` and `email_verifications` tables automatically. On an existing `students` table, startup adds a nullable `owner_id` column without deleting existing student records.
 
-The backend reads `DATABASE_URL` from `backend/.env`. To use PostgreSQL:
+## 3. Run the frontend
 
-1. Create a PostgreSQL database named `campusconnect`.
-2. Copy `backend/.env.example` to `backend/.env`.
-3. Set `DATABASE_URL` to `postgresql+psycopg://postgres:YOUR_PASSWORD@localhost:5432/campusconnect` (replace the username/password with your own).
-4. Install dependencies with `pip install -r requirements.txt` so the Psycopg 3 driver is installed.
-5. Start FastAPI as shown above. Tables and demo profiles are created automatically on first run.
+Open a second terminal:
 
-If `DATABASE_URL` is not set, the app falls back to a local SQLite database. Never commit `backend/.env`; it is excluded by `.gitignore`.
-
-## 2. Run the frontend
-
-Open another terminal:
-
-```bash
+```powershell
 cd frontend
 npm install
 npm run dev
@@ -60,38 +72,35 @@ npm run dev
 
 Frontend: http://localhost:5173
 
-## 3. Enable the AI assistant (optional)
+## 4. Authentication flow
 
-Create `backend/.env` based on `.env.example`:
+1. Open the frontend and choose **Log in** → **Create an account**.
+2. Enter your name, an email ending in `@iilm.edu`, and a password of at least 10 characters.
+3. Configure SMTP in `backend/.env`; a six-digit verification code is emailed to the address.
+4. Enter the code in the frontend. A JWT is issued after successful verification.
+5. Log in on later visits using the same email and password.
+6. Profile creation and the Campus AI assistant require a verified login.
 
-```env
-GROQ_API_KEY=your_key_here
-GROQ_MODEL=llama-3.3-70b-versatile
-```
+The access token expires after 60 minutes. Logging out clears it from this browser. This MVP stores the token in localStorage; for a production deployment, move to secure HttpOnly cookies, add rate limiting, account recovery, CSRF protections where applicable, and a formal database migration system.
 
-Get an API key from https://console.groq.com/keys, then restart FastAPI.
+## Authentication endpoints
 
-Without a key, the rest of the app and ML recommendations still work. The assistant returns a helpful setup message.
+- `POST /api/auth/register`
+- `POST /api/auth/verify`
+- `POST /api/auth/login`
+- `POST /api/auth/resend-verification`
+- `GET /api/auth/me` (Bearer token required)
 
-## Main API endpoints
-
+Other endpoints:
 - `GET /api/health`
 - `GET /api/students`
-- `POST /api/students`
+- `POST /api/students` (Bearer token required)
 - `GET /api/students/{student_id}`
-- `GET /api/recommendations/{student_id}?limit=6`
-- `GET /api/teammates/{student_id}?limit=6`
-- `POST /api/assistant`
+- `GET /api/recommendations/{student_id}`
+- `GET /api/teammates/{student_id}`
+- `POST /api/assistant` (Bearer token required)
 
-## ML approach
-
-The recommender combines a student's skills, interests, goals and bio into a text document. A TF-IDF vectorizer converts these documents into numeric vectors, and cosine similarity ranks the most similar students.
-
-The teammate endpoint additionally rewards complementary skill sets. This is a transparent baseline, not a trained predictive model. You can later improve it with sentence-transformer embeddings, feedback data, and a learning-to-rank model.
-
-## Suggested next upgrades
-1. Add JWT authentication and university email verification.
-2. Add connection requests and messaging.
-3. Add PostgreSQL for deployment.
-4. Add moderation, reporting and profile visibility settings.
-5. Collect opt-in feedback to evaluate recommendation quality.
+## Important notes
+- Existing demo student profiles remain in the database.
+- Existing profiles are not automatically assigned to newly registered users.
+- This is a development MVP, not a production-hardened identity system. Use only test accounts until email delivery, authorization, backups and deployment security have been reviewed.

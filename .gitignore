@@ -1,7 +1,11 @@
-/venv/
+.venv/
+venv/
 .env
-backend/.env
+**/.env
 __pycache__/
 node_modules/
 *.pyc
-campusconnect.db
+*.py[cod]
+*.db
+dist/
+.DS_Store
