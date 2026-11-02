@@ -19,14 +19,27 @@ function Avatar({person, size="md"}) {
   return <img className={`avatar ${size}`} src={person.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(person.name)}&background=e8eaff&color=5147bd`} alt={person.name} />;
 }
 
-function StudentCard({person, score, reason, onConnect}) {
-  return <article className="student-card">
-    <div className="card-top"><Avatar person={person}/><button className="icon-button" aria-label="Save profile"><Heart size={17}/></button></div>
+function StudentCard({person, score, reason, onConnect, mode}) {
+  const isAI = mode === "For you";
+  const isTeam = mode === "Find teammates";
+  return <article className={`student-card enhanced-card ${isAI ? "ai-card" : isTeam ? "team-card" : "discover-card"}`}>
+    <div className="card-top">
+      <div className="avatar-wrap"><Avatar person={person}/><span className="online-indicator"/></div>
+      <div className="card-badges">
+        {(isAI || isTeam) && <span className="match-badge"><Sparkles size={12}/>{score !== undefined ? `${score}% match` : "AI insight"}</span>}
+        <button className="icon-button save-profile" aria-label="Save profile"><Heart size={17}/></button>
+      </div>
+    </div>
     <div className="person-name">{person.name}</div>
-    <div className="muted small">{person.course} · {person.year}</div>
+    <div className="muted small">{person.course} <span className="meta-dot">·</span> {person.year}</div>
     <p className="bio">{person.bio}</p>
-    <div className="tags">{(person.skills || []).slice(0,3).map(s=><span className="tag" key={s}>{s}</span>)}</div>
-    {score !== undefined && <div className="match-row"><span><Sparkles size={13}/> {score}% match</span><span className="muted tiny">{reason || "Recommended for you"}</span></div>}
+    <div className="card-label">CORE SKILLS</div>
+    <div className="tags">{(person.skills || []).slice(0,4).map(s=><span className="tag" key={s}>{s}</span>)}</div>
+    {(isAI || isTeam) && <div className="match-explanation">
+      <div className="explanation-title"><span className="explanation-icon"><Sparkles size={13}/></span><b>{isTeam ? "Team fit analysis" : "Why this matches you"}</b><span className="analysis-live">ANALYSIS</span></div>
+      <p>{reason || (isTeam ? "Potential fit based on complementary skills and project interests." : "Suggested based on profile skills, interests and goals.")}</p>
+    </div>}
+    {!isAI && !isTeam && <div className="interest-line"><span>INTERESTS</span><b>{(person.interests || []).slice(0,2).join(" · ") || "Open to connecting"}</b></div>}
     <button className="connect-button" onClick={()=>onConnect(person)}>View profile <ArrowUpRight size={15}/></button>
   </article>;
 }
@@ -145,16 +158,23 @@ function App() {
 
   const displayList = active==="For you" ? recommendations.map(x=>({...x.student,matchScore:x.score,matchReason:x.reason})) :
     active==="Find teammates" ? teammates.map(x=>({...x.student,matchScore:x.score,matchReason:x.reason})) : filtered;
+  const pageCopy = {
+    "Discover": { kicker: "CAMPUS NETWORK / DISCOVER", title: <>Discover. <span>Connect.</span> Grow.</>, description: "Meet curious minds, explore new interests and find people to build something meaningful with.", section: "Explore students", detail: "A growing community of people, skills and ideas." },
+    "For you": { kicker: "INTELLIGENCE / PERSONALIZED MATCHES", title: <>Your next <span>great connection</span> starts here.</>, description: "AI-assisted suggestions shaped by your skills, interests and goals.", section: "Recommended for you", detail: "A closer look at people whose interests and direction overlap with yours." },
+    "Find teammates": { kicker: "COLLABORATION / TEAM BUILDER", title: <>Build better. <span>Together.</span></>, description: "Find collaborators with complementary strengths and shared ambitions.", section: "Potential teammates", detail: "Explore people who could bring a missing skill or fresh perspective to your project." }
+  }[active];
 
   return <div className="app-shell">
     <aside className="sidebar">
       <a className="brand" href="#"><span className="brand-mark"><Users size={20}/></span><span>campus<span className="brand-accent">connect</span><sup>AI</sup></span></a>
-      <div className="workspace-label">YOUR CAMPUS</div>
+      <div className="workspace-label">WORKSPACE</div>
       <nav>
         {[["Discover",Compass],["For you",Sparkles],["Find teammates",Users]].map(([label,Icon])=><button key={label} className={`nav-link ${active===label?"selected":""}`} onClick={()=>setActive(label)}><Icon size={18}/>{label}{label==="For you"&&<span className="nav-dot"/>}</button>)}
       </nav>
+      <div className="workspace-label network-label">CAMPUS INTELLIGENCE</div>
+      <div className="sidebar-feature"><div className="feature-icon"><Zap size={15}/></div><div><b>AI match engine</b><span>Finding your next connection</span></div><i/></div>
       <div className="sidebar-bottom">
-        <div className="campus-card"><div className="campus-icon"><GraduationCap size={19}/></div><b>Your campus, closer.</b><p>Find people who make your next idea possible.</p></div>
+        <div className="campus-card"><div className="campus-icon"><Bot size={19}/></div><b>Your AI collaboration hub.</b><p>Discover people, combine strengths and turn ideas into projects.</p><span className="campus-card-glow"/></div>
         <div className="mini-profile"><div className="mini-avatar">{currentUser?.full_name?.[0]||"S"}</div><div><b>{currentUser?.full_name||"Student account"}</b><span>{currentUser?"Verified account":"Explore mode"}</span></div><ChevronDown size={15}/></div>
       </div>
     </aside>
@@ -166,36 +186,41 @@ function App() {
         <div className="top-actions"><span className={`api-status ${apiOnline?"online":""}`}><i/>{apiOnline?"API connected":"Demo preview"}</span><button className="icon-button notification"><Bell size={18}/></button>{currentUser?<button className="outline-button" onClick={logout}>Log out</button>:<button className="outline-button" onClick={()=>openAuth("login")}>Log in</button>}<button className="primary-button compact" onClick={()=>setModal("create")}><Plus size={16}/> Create profile</button></div>
       </header>
 
-      <section className="hero">
-        <div className="hero-copy">
-          <div className="eyebrow"><span className="eyebrow-spark">✳</span> YOUR CAMPUS. YOUR COMMUNITY.</div>
-          <h1>Big things happen<br/>when <span>people connect.</span></h1>
-          <p>Meet students who share your interests, complement your skills, and are ready to build something meaningful.</p>
-          <div className="hero-actions"><button className="primary-button" onClick={()=>document.getElementById("people")?.scrollIntoView({behavior:"smooth"})}>Explore community <ArrowRight size={17}/></button><button className="text-button" onClick={()=>setModal("create")}>Create your profile <ArrowUpRight size={16}/></button></div>
-          <div className="social-proof"><div className="avatar-stack">{students.slice(0,4).map(p=><Avatar key={p.id} person={p} size="xs"/>)}</div><span><b>{students.length}+ students</b> ready to connect</span></div>
+      <section className="command-header">
+        <div className="command-heading">
+          <div className="eyebrow"><span className="live-pulse"/> CAMPUSCONNECT INTELLIGENCE / {active.toUpperCase()}</div>
+          <h1>{active === "Discover" ? <>Your campus.<br/><span>Infinite possibilities.</span></> : active === "For you" ? <>Connections that<br/><span>make sense for you.</span></> : <>Find your next<br/><span>project partner.</span></>}</h1>
+          <p>{pageCopy.description}</p>
+          <div className="command-actions">
+            <button className="primary-button" onClick={()=>document.getElementById("people")?.scrollIntoView({behavior:"smooth"})}><Compass size={16}/> Explore network <ArrowRight size={16}/></button>
+            <button className="outline-button" onClick={()=>setModal("create")}><Plus size={15}/> Build your profile</button>
+          </div>
         </div>
-        <div className="hero-art">
-          <div className="orbit orbit-one"/><div className="orbit orbit-two"/>
-          <div className="floating-card fc-main"><div className="fc-label"><span className="pulse"/> PERFECT TEAMMATE FOUND</div><div className="fc-person"><Avatar person={students[1]||demoFallback[1]} size="lg"/><div><b>{students[1]?.name||"Meera Kapoor"}</b><span>UI/UX + Frontend</span></div><span className="match-pill">96% match</span></div><div className="fc-bottom"><span><Check size={13}/> Shared project goals</span><span><Check size={13}/> Complementary skills</span></div></div>
-          <div className="float-bubble bubble-top"><Sparkles size={16}/> AI MATCHING</div>
-          <div className="float-bubble bubble-bottom"><span className="bubble-avatars">✦</span> Your people are here</div>
-          <div className="decor-star star-one">✳</div><div className="decor-star star-two">✦</div>
+        <div className="intelligence-panel">
+          <div className="intelligence-top"><div className="intelligence-icon"><Bot size={19}/></div><div><b>Campus AI engine</b><span><i/> {apiOnline ? "Connected to your campus data" : "Preview mode · sample insights"}</span></div><span className="engine-version">LIVE</span></div>
+          <div className="intelligence-orb"><div className="orb-ring orb-ring-a"/><div className="orb-ring orb-ring-b"/><div className="orb-center"><Sparkles size={25}/></div><span className="orb-dot orb-dot-a"/><span className="orb-dot orb-dot-b"/></div>
+          <div className="intelligence-caption"><b>{active === "Find teammates" ? "Team compatibility" : active === "For you" ? "Personalized discovery" : "Smarter campus discovery"}</b><span>{active === "Find teammates" ? "Bring different strengths together." : active === "For you" ? "Find people aligned with your interests." : "Turn shared interests into real connections."}</span></div>
         </div>
       </section>
 
-      <section className="stats-strip">
-        <div><b>{students.length.toString().padStart(2,"0")}</b><span>Student profiles</span></div><div><b>AI</b><span>Smart matching</span></div><div><b>∞</b><span>Possibilities to build</span></div><div className="stats-note"><Zap size={16}/> Find collaborators, not just connections.</div>
+      <section className="overview-metrics">
+        <div className="metric-card"><span className="metric-icon purple"><Users size={17}/></span><div><b>{students.length.toString().padStart(2,"0")}</b><span>Campus profiles</span></div><small>COMMUNITY</small></div>
+        <div className="metric-card"><span className="metric-icon blue"><Sparkles size={17}/></span><div><b>{recommendations.length.toString().padStart(2,"0")}</b><span>Suggested for you</span></div><small>AI MATCHES</small></div>
+        <div className="metric-card"><span className="metric-icon green"><Zap size={17}/></span><div><b>{teammates.length.toString().padStart(2,"0")}</b><span>Team possibilities</span></div><small>COLLABORATE</small></div>
       </section>
 
-      <section className="people-section" id="people">
-        <div className="section-heading"><div><div className="eyebrow">THE COMMUNITY</div><h2>{active==="Discover"?"Find your people.":active==="For you"?"Picked for you.":"Build your dream team."}</h2><p>{active==="Find teammates"?"People who bring skills you don't have — and share the goal.":"Discover interesting people doing interesting things around campus."}</p></div><button className="outline-button" onClick={()=>setModal("create")}><Plus size={16}/> Join the community</button></div>
-        <div className="filter-row"><div className="search-box"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search people, skills, interests..."/></div><div className="filter-label"><Sparkles size={15}/> {active==="For you"?"ML-powered matches":active==="Find teammates"?"Complementary skills":"Explore students"}</div></div>
-        {!apiOnline && <div className="demo-notice">You're viewing demo profiles. Start the FastAPI backend to enable profile creation, live recommendations and the AI assistant.</div>}
-        <div className="student-grid">
-          {displayList.map(person=><StudentCard key={person.id} person={person} score={person.matchScore} reason={person.matchReason} onConnect={connect}/>)}
-          {!displayList.length && <div className="empty-state">No matches yet. Try another search or add a profile.</div>}
+      <section className="dashboard-grid">
+        <div className="dashboard-main" id="people">
+          <div className="dashboard-section-title"><div><div className="eyebrow">{pageCopy.kicker}</div><h2>{pageCopy.section}</h2><p>{pageCopy.detail}</p></div><span className="result-count">{displayList.length} RESULTS</span></div>
+          <div className="filter-row"><div className="search-box"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search people, skills, interests..."/></div><div className="filter-label"><Sparkles size={15}/> {active==="For you"?"ML-powered matches":active==="Find teammates"?"Complementary skills":"Explore students"}</div></div>
+          {!apiOnline && <div className="demo-notice">You're viewing demo profiles. Start the FastAPI backend to enable profile creation, live recommendations and the AI assistant.</div>}
+          <div className="student-grid">{displayList.map(person=><StudentCard key={person.id} person={person} score={person.matchScore} reason={person.matchReason} mode={active} onConnect={connect}/>)}{!displayList.length&&<div className="empty-state">No matches yet. Try another search or add a profile.</div>}</div>
         </div>
-        <div className="bottom-cta"><div className="cta-icon"><Sparkles size={20}/></div><div><b>Your next great collaboration starts here.</b><span>Tell the community what you're passionate about.</span></div><button className="primary-button compact" onClick={()=>setModal("create")}>Create profile <ArrowRight size={15}/></button></div>
+        <aside className="dashboard-rail">
+          <div className="rail-card focus-card"><div className="rail-card-heading"><span className="rail-icon"><Sparkles size={15}/></span><span>AI INSIGHT</span><span className="rail-live">● ACTIVE</span></div><h3>{active === "Find teammates" ? "Build a balanced team" : active === "For you" ? "Your next connection is closer" : "Your campus is full of potential"}</h3><p>{active === "Find teammates" ? "Look for collaborators whose strengths add something different to your own." : active === "For you" ? "Explore students with overlapping interests, skills and goals." : "Discover people beyond your usual circle and find new opportunities to collaborate."}</p><div className="insight-graphic"><div className="insight-node node-main"><Bot size={17}/></div><span className="insight-line line-one"/><span className="insight-line line-two"/><span className="insight-node node-small one"/><span className="insight-node node-small two"/><span className="insight-node node-small three"/></div><button className="rail-action" onClick={()=>setActive(active === "Discover" ? "For you" : "Find teammates")}>{active === "Discover" ? "See your AI matches" : "Explore team candidates"}<ArrowRight size={14}/></button></div>
+          <div className="rail-card quick-card"><div className="rail-card-heading"><span className="rail-icon cyan"><Zap size={15}/></span><span>QUICK ACTIONS</span></div><button onClick={()=>setModal("create")}><Plus size={15}/> Complete your student profile<ArrowUpRight size={14}/></button><button onClick={()=>setChatOpen(true)}><Bot size={15}/> Ask Campus AI<ArrowUpRight size={14}/></button><button onClick={()=>setActive("Find teammates")}><Users size={15}/> Find project teammates<ArrowUpRight size={14}/></button></div>
+          <div className="rail-note"><span className="note-spark">✦</span><div><b>Good things happen together.</b><p>Share what you're learning. Find people who want to build with you.</p></div></div>
+        </aside>
       </section>
       <footer><a className="brand footer-brand" href="#"><span className="brand-mark"><Users size={17}/></span>campus<span className="brand-accent">connect</span><sup>AI</sup></a><span>Made for curious minds and big ideas.</span><span>© 2026 CampusConnect AI</span></footer>
     </main>

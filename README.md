@@ -18,7 +18,7 @@ A student networking MVP built with React + Vite, FastAPI, SQLAlchemy, PostgreSQ
 
 ## 1. Configure the backend
 
-Open `backend/.env`, copy it to `backend/.env`, then fill in your own values. Do not commit `.env`.
+Open `backend/.env.example`, copy it to `backend/.env`, then fill in your own values. Do not commit `.env`.
 
 Required settings:
 
@@ -104,3 +104,17 @@ Other endpoints:
 - Existing demo student profiles remain in the database.
 - Existing profiles are not automatically assigned to newly registered users.
 - This is a development MVP, not a production-hardened identity system. Use only test accounts until email delivery, authorization, backups and deployment security have been reviewed.
+
+## UI refresh
+
+The frontend now uses a premium dark, futuristic AI dashboard theme. The Discover, For you, and Find teammates views have distinct page messaging and card treatments, with match explanations shown when the API returns recommendation reasons. Existing authentication, profile, assistant, and API flows are retained.
+
+To run the frontend after extracting the project:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The UI uses the existing React, Vite, and lucide-react dependencies; no new frontend package is required.
