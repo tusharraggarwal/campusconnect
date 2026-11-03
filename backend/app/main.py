@@ -13,22 +13,27 @@ from .recommender import recommend_students
 from .seed import seed_students
 from .auth import get_current_user
 from .auth_routes import router as auth_router
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 Base.metadata.create_all(bind=engine)
-app = FastAPI(title="CampusConnect AI API", version="1.0.0")
-
-app.include_router(auth_router)
-
+app = FastAPI(
+    title="CampusConnect AI API", 
+    version="1.0.0"
+    ) 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://campusconnect-three-rho.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 
 @app.on_event("startup")
 def startup():
