@@ -5,7 +5,9 @@ import {
   Users, X, Zap
 } from "lucide-react";
 
-const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
+const API = (
+  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"
+).replace(/\/+$/, "");
 const demoFallback = [
   {id:1,name:"Aarav Sharma",course:"B.Tech CSE",year:"2nd Year",bio:"Building practical AI products and exploring computer vision.",skills:["Python","Machine Learning","PyTorch","OpenCV"],interests:["AI","Hackathons","Badminton"],avatar:"https://i.pravatar.cc/160?img=12"},
   {id:2,name:"Meera Kapoor",course:"B.Tech IT",year:"2nd Year",bio:"Frontend developer who enjoys turning ideas into clean products.",skills:["React","JavaScript","CSS","Figma"],interests:["Startups","Design","Hackathons"],avatar:"https://i.pravatar.cc/160?img=47"},
@@ -104,11 +106,11 @@ function App() {
     try {
       let endpoint, body;
       if(authStep==="verify") {
-        endpoint="/auth/verify"; body={email:authForm.email,code:verificationCode};
+        endpoint="/api/auth/verify"; body={email:authForm.email,code:verificationCode};
       } else if(authMode==="register") {
         endpoint="/auth/register"; body=authForm;
       } else {
-        endpoint="/auth/login"; body={email:authForm.email,password:authForm.password};
+        endpoint="/api/auth/login"; body={email:authForm.email,password:authForm.password};
       }
       const response=await fetch(`${API}${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
       const data=await response.json();

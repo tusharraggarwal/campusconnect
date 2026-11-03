@@ -1,120 +1,147 @@
-# CampusConnect AI
+# CampusConnect.ai
 
-A student networking MVP built with React + Vite, FastAPI, SQLAlchemy, PostgreSQL, scikit-learn and optional Groq/Llama.
+An AI-powered campus networking platform that helps students discover project partners, teammates and collaborators based on shared interests and complementary skills.
 
-## Current features
-- Student discovery and profile creation
-- PostgreSQL support through `DATABASE_URL`
-- TF-IDF + cosine-similarity recommendations and teammate suggestions
-- Groq-powered campus assistant
-- IILM-only account registration (`@iilm.edu`)
-- Email verification, Argon2 password hashing and JWT login
-- Protected profile creation and AI assistant endpoints
+**Live demo:** https://campusconnect-three-rho.vercel.app
+**API docs:** https://campusconnect-zaxg.onrender.com/docs
+
+> The backend runs on a free tier and sleeps when idle. The first request can take 30-60 seconds to wake it up.
+
+---
+
+## Features
+
+- **Student profiles:** create a profile with course, year, bio, skills, interests, goals and what you're looking for
+- **Discover and search:** browse the campus community and filter by skills and interests
+- **AI recommendations ("For you"):** interest-based ML recommender that suggests compatible students
+- **TF-IDF + cosine-similarity recommendations and teammate suggestions
+- **Groq-powered campus assistant
+- **IILM-only account registration (`@iilm.edu`)
+- **Team builder:** find teammates who bring a missing skill or a fresh perspective
+- **Campus AI chatbot:** assistant powered by Groq LLMs
+- **Secure authentication:** JWT-based login with hashed passwords
+- **Email verification:** one-time passcode (OTP) sent on sign-up, with expiry and attempt limits
 
 ## Requirements
 - Python 3.10+
 - Node.js 18+
 - PostgreSQL 14+ (recommended for this setup)
 
-## 1. Configure the backend
+## Tech stack
 
-Open `backend/.env.example`, copy it to `backend/.env`, then fill in your own values. Do not commit `.env`.
+| Layer | Technology |
+|---|---|
+| Frontend | React, Vite |
+| Backend | FastAPI, SQLAlchemy, Pydantic |
+| Database | PostgreSQL (Neon) |
+| ML / AI | Interest-based recommender, Groq API |
+| Auth | JWT, hashed passwords, email OTP |
+| Hosting | Vercel (frontend), Render (backend), Neon (database) |
 
-Required settings:
+## Architecture
 
-```env
-DATABASE_URL=postgresql+psycopg://postgres:YOUR_POSTGRES_PASSWORD@localhost:5432/campusconnect
-GROQ_API_KEY=your_groq_key
-GROQ_MODEL=llama-3.3-70b-versatile
-JWT_SECRET_KEY=replace_with_a_random_secret_at_least_32_characters_long
-UNIVERSITY_EMAIL_DOMAIN=iilm.edu
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=your_sending_email@gmail.com
-SMTP_PASSWORD=your_email_app_password
-SMTP_FROM=your_sending_email@gmail.com
+```
+React (Vercel)  ──HTTPS──>  FastAPI (Render)  ──SSL──>  PostgreSQL (Neon)
+                                  │
+                                  └──> Groq API (chatbot)
 ```
 
-For Gmail SMTP, use an app password where supported, not your normal account password. SMTP credentials are only for sending verification messages. Do not put secrets in frontend files or GitHub.
+## Project structure
 
-Generate a JWT secret with Python:
+```
+CampusConnect.ai/
+├── backend/
+│   ├── app/
+│   │   ├── main.py            # FastAPI app, CORS, routes
+│   │   ├── auth.py            # JWT and password helpers
+│   │   ├── auth_routes.py     # signup, login, email verification
+│   │   ├── auth_schemas.py
+│   │   ├── database.py        # SQLAlchemy engine and session
+│   │   ├── models.py          # users, students, email_verifications
+│   │   ├── schemas.py
+│   │   ├── recommender.py     # interest-based matching
+│   │   └── seed.py            # sample data
+│   └── requirements.txt
+├── frontend/                  # React + Vite app
+└── README.md
+```
+
+## Run locally
+
+### 1. Clone
 
 ```bash
-python -c "import secrets; print(secrets.token_urlsafe(48))"
+git clone https://github.com/tusharraggarwal/campusconnect.git
+cd campusconnect
 ```
 
-If your PostgreSQL password contains URL-reserved characters such as `@`, `/`, `:` or `%`, URL-encode those characters in `DATABASE_URL`.
+### 2. Backend
 
-## 2. Install and run the backend (Windows PowerShell)
-
-```powershell
+```bash
 cd backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+python -m venv venv
+venv\Scripts\activate          # Windows
+# source venv/bin/activate     # macOS / Linux
 pip install -r requirements.txt
+```
+
+Create `backend/.env`:
+
+```env
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DBNAME?sslmode=require
+SECRET_KEY=a-long-random-string
+GROQ_API_KEY=your-groq-key
+# plus the email / SMTP settings your app uses for OTP
+```
+
+Start the server:
+
+```bash
 uvicorn app.main:app --reload
 ```
 
-API: http://127.0.0.1:8000  
-Swagger docs: http://127.0.0.1:8000/docs
+API docs: http://127.0.0.1:8000/docs
 
-The application creates the `users` and `email_verifications` tables automatically. On an existing `students` table, startup adds a nullable `owner_id` column without deleting existing student records.
-
-## 3. Run the frontend
-
-Open a second terminal:
-
-```powershell
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend: http://localhost:5173
-
-## 4. Authentication flow
-
-1. Open the frontend and choose **Log in** → **Create an account**.
-2. Enter your name, an email ending in `@iilm.edu`, and a password of at least 10 characters.
-3. Configure SMTP in `backend/.env`; a six-digit verification code is emailed to the address.
-4. Enter the code in the frontend. A JWT is issued after successful verification.
-5. Log in on later visits using the same email and password.
-6. Profile creation and the Campus AI assistant require a verified login.
-
-The access token expires after 60 minutes. Logging out clears it from this browser. This MVP stores the token in localStorage; for a production deployment, move to secure HttpOnly cookies, add rate limiting, account recovery, CSRF protections where applicable, and a formal database migration system.
-
-## Authentication endpoints
-
-- `POST /api/auth/register`
-- `POST /api/auth/verify`
-- `POST /api/auth/login`
-- `POST /api/auth/resend-verification`
-- `GET /api/auth/me` (Bearer token required)
-
-Other endpoints:
-- `GET /api/health`
-- `GET /api/students`
-- `POST /api/students` (Bearer token required)
-- `GET /api/students/{student_id}`
-- `GET /api/recommendations/{student_id}`
-- `GET /api/teammates/{student_id}`
-- `POST /api/assistant` (Bearer token required)
-
-## Important notes
-- Existing demo student profiles remain in the database.
-- Existing profiles are not automatically assigned to newly registered users.
-- This is a development MVP, not a production-hardened identity system. Use only test accounts until email delivery, authorization, backups and deployment security have been reviewed.
-
-## UI refresh
-
-The frontend now uses a premium dark, futuristic AI dashboard theme. The Discover, For you, and Find teammates views have distinct page messaging and card treatments, with match explanations shown when the API returns recommendation reasons. Existing authentication, profile, assistant, and API flows are retained.
-
-To run the frontend after extracting the project:
+### 3. Frontend
 
 ```bash
 cd frontend
 npm install
+```
+
+Create `frontend/.env`:
+
+```env
+VITE_API_URL=http://127.0.0.1:8000
+```
+
+```bash
 npm run dev
 ```
 
-The UI uses the existing React, Vite, and lucide-react dependencies; no new frontend package is required.
+## Deployment
+
+| Service | Setting |
+|---|---|
+| Render (backend) | Root directory `backend`, build `pip install -r requirements.txt`, start `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Render env vars | `DATABASE_URL`, `SECRET_KEY`, `GROQ_API_KEY`, email settings |
+| Vercel (frontend) | Root directory `frontend`, env var `VITE_API_URL` set to the Render URL (no trailing slash) |
+| CORS | Add the Vercel URL to the allowed origins in `backend/app/main.py` |
+
+## Security notes
+
+- Secrets live in environment variables and are never committed (`.env` is in `.gitignore`)
+- Passwords are stored as hashes
+- OTP codes are stored hashed, expire, and limit attempts
+
+## Roadmap
+
+- Alembic database migrations
+- Automated tests and CI with GitHub Actions
+- Rate limiting on login and OTP endpoints
+- Team formation and messaging between students
+
+## Author
+
+**Tushar**, B.Tech CSE (AI/ML), IILM University, Greater Noida
+GitHub: [tusharraggarwal](https://github.com/tusharraggarwal)
