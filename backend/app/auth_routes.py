@@ -15,7 +15,7 @@ from .auth_schemas import (
     LoginRequest, RegisterRequest, TokenResponse, UserOut, VerifyEmailRequest,
 )
 
-router = APIRouter(prefix="/api/auth", tags=["authentication"])
+router = APIRouter(prefix="/auth", tags=["authentication"])
 ALLOWED_DOMAIN = os.getenv("UNIVERSITY_EMAIL_DOMAIN", "iilm.edu").lower()
 
 

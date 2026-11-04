@@ -1,9 +1,12 @@
 import hashlib
 import os
 import secrets
+import json
 import smtplib
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import jwt
 from fastapi import Depends, HTTPException
@@ -40,22 +43,68 @@ def create_access_token(user_id: int) -> str:
 
 
 def send_verification_email(recipient: str, code: str) -> None:
+    """Send verification mail through Brevo HTTP API, or SMTP for local development.
+
+    On Render, set BREVO_API_KEY and BREVO_FROM_EMAIL. If BREVO_API_KEY is not
+    configured, the function falls back to the existing SMTP environment variables.
+    """
+    brevo_api_key = os.getenv("BREVO_API_KEY")
+    brevo_sender = os.getenv("BREVO_FROM_EMAIL")
+    brevo_sender_name = os.getenv("BREVO_FROM_NAME", "CampusConnect AI")
+    email_text = (
+        f"Your CampusConnect verification code is {code}. "
+        "It expires in 10 minutes. If you did not request this, ignore this email."
+    )
+
+    # Prefer Brevo's HTTPS API in production (works on Render Free).
+    if brevo_api_key:
+        if not brevo_sender:
+            raise RuntimeError("BREVO_FROM_EMAIL must be set when BREVO_API_KEY is configured.")
+
+        payload = {
+            "sender": {"name": brevo_sender_name, "email": brevo_sender},
+            "to": [{"email": recipient}],
+            "subject": "Verify your CampusConnect account",
+            "textContent": email_text,
+        }
+        request = Request(
+            "https://api.brevo.com/v3/smtp/email",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "accept": "application/json",
+                "api-key": brevo_api_key,
+                "content-type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                if response.status not in (200, 201, 202):
+                    raise RuntimeError(f"Brevo email request failed with HTTP {response.status}.")
+            return
+        except HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Brevo could not send the verification email (HTTP {exc.code}): {detail}") from exc
+        except URLError as exc:
+            raise RuntimeError(f"Could not connect to Brevo: {exc.reason}") from exc
+
+    # SMTP remains available for local development.
     host = os.getenv("SMTP_HOST")
     username = os.getenv("SMTP_USERNAME")
     password = os.getenv("SMTP_PASSWORD")
     sender = os.getenv("SMTP_FROM", username or "")
     port = int(os.getenv("SMTP_PORT", "587"))
     if not all([host, username, password, sender]):
-        raise RuntimeError("Email is not configured. Set SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD and SMTP_FROM in backend/.env.")
+        raise RuntimeError(
+            "Email is not configured. Set BREVO_API_KEY and BREVO_FROM_EMAIL for deployment, "
+            "or configure SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD and SMTP_FROM for local development."
+        )
 
     message = EmailMessage()
     message["Subject"] = "Verify your CampusConnect account"
     message["From"] = sender
     message["To"] = recipient
-    message.set_content(
-        f"Your CampusConnect verification code is {code}. "
-        "It expires in 10 minutes. If you did not request this, ignore this email."
-    )
+    message.set_content(email_text)
     with smtplib.SMTP(host, port, timeout=20) as server:
         server.starttls()
         server.login(username, password)
